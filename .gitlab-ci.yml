@@ -1,0 +1,60 @@
+stages:
+  - build
+  - test
+  - docker-build
+  - deploy
+
+build:
+  stage: build
+  image: node
+  script: 
+    - echo "Start building App"
+    - npm install
+    - npm run build
+    - echo "Build successfully!"
+  artifacts:
+    expire_in: 1 hour
+    paths:
+      - build
+      - node_modules/
+
+test:
+  stage: test
+  image: node
+  script:
+    - echo "Testing App"
+    - npm install
+    - CI=true npm test
+    - echo "Test successfully!"
+
+docker-build:
+  stage: docker-build
+  image: docker:latest
+  services: 
+    - name: docker:dind
+  before_script:
+    - docker login -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD"
+  script:
+    - docker build --pull -t "$CI_REGISTRY_IMAGE:$CI_REGISTRY_IMAGE_TAG" .
+    - docker push "$CI_REGISTRY_IMAGE:$CI_REGISTRY_IMAGE_TAG"
+
+deploy:
+  stage: deploy
+  before_script:
+    - echo "deploying app"
+    - chmod 400 $SSH_PRIVATE_KEY
+  script:
+    - ssh -o StrictHostKeyChecking=no -i $SSH_PRIVATE_KEY $PROD_SERVER_USER_NAME@$PROD_SERVER_IP "docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD && 
+      docker ps -aq | xargs docker stop | xargs docker rm &&
+      docker run -d  -p 3001:80 $CI_REGISTRY_IMAGE:$CI_REGISTRY_IMAGE_TAG"
+
+variables:
+  CI_REGISTRY_USER: ""
+  CI_REGISTRY_PASSWORD: ""
+  CI_REGISTRY_IMAGE: "alamin/test"
+  CI_REGISTRY_IMAGE_TAG: "1.1"
+  PROD_SERVER_USER_NAME: ""
+  PROD_SERVER_IP : ""
+  SSH_PRIVATE_KEY : ""
+
+  
